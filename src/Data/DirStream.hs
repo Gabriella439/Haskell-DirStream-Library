@@ -4,10 +4,11 @@
 
 module Data.DirStream
     ( -- * Directory Traversals
+      -- $traversals
       childOf
+    , descendentOf
 
     -- * Utilities
-    -- $utilities
     , unixVisible
     , isDirectory
 
@@ -15,6 +16,7 @@ module Data.DirStream
     -- $tutorial
     ) where
 
+import Control.Applicative ((<|>))
 import Control.Monad (when)
 import Data.List (isPrefixOf)
 import Pipes (ListT(Select), yield, lift)
@@ -26,7 +28,16 @@ import Filesystem.Path ((</>))
 import Filesystem (isDirectory)
 import System.Posix (openDirStream, readDirStream, closeDirStream)
 
--- | Select all children of the given directory, ignoring @\".\"@ and @\"..\"@
+{- $traversals
+    There many possible recursion schemes for traversing directories.  Rather
+    than provide them all, I prefer that you learn to assemble your own
+    recursion schemes, using the source code for 'descendentOf' as a starting
+    point.
+-}
+
+{-| Select all immediate children of the given directory, ignoring @\".\"@ and
+    @\"..\"@
+-}
 childOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
 childOf path = Select $ do
     let path' = F.encodeString path
@@ -42,19 +53,24 @@ childOf path = Select $ do
                             yield (path </> file)
                         loop
         loop
+{-# INLINABLE childOf #-}
 
-{- $utilities
-    There many possible recursion schemes for traversing directories.  Rather
-    than provide them all, I prefer that you learn to assemble your own
-    recursion scheme, using the @descendentOf@ example from the tutorial as a
-    starting point.
--}
+-- | Select all recursive descendents of the given directory
+descendentOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
+descendentOf path = do
+    child <- childOf path
+    isDir <- lift $ lift $ isDirectory child
+    if isDir
+        then return child <|> descendentOf child
+        else return child
+{-# INLINABLE descendentOf #-}
 
 {-| Determine if a file is visible according to Unix conventions, defined as the
     base name not beginning with a @\'.\'@
 -}
 unixVisible :: F.FilePath -> Bool
 unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
+{-# INLINABLE unixVisible #-}
 
 -- $tutorial
 --  The following example shows a simple program that enumerates the contents of
@@ -80,13 +96,8 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 --  allowing you to traverse very large directory lists.
 --
 --  You can use 'ListT' to assemble more sophisticated traversals, such as the
---  following recursive traversal:
+--  recursive 'descendentOf' traversal, which has the following definition:
 --
--- > ...
--- >
--- > import Control.Monad (guard)
--- > import qualified Filesystem.Path as F
--- >
 -- > descendentOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
 -- > descendentOf path = do
 -- >     child <- childOf path
@@ -94,7 +105,10 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 -- >     if isDir
 -- >         then return child <|> descendentOf child
 -- >         else return child
--- >
+--
+--  These recursive traversals will promptly open and close nested directory
+--  streams as they traverse the directory tree:
+--
 -- > main2 = runSafeT $ run $
 -- >     every (descendentOf "/tmp") >-> P.show >-> hoist lift P.stdout
 --
@@ -108,8 +122,8 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 -- FilePath "/tmp/dir2/fileD"
 -- FilePath "/tmp/fileE"
 --
---  'childOf' is lazy and will open the minimal number of directories necessary
---  to satisfy downstream demand:
+--  These traverals are lazy and will open the minimal number of directories
+--  necessary to satisfy downstream demand:
 --
 -- > main3 = runSafeT $ run $
 -- >     every (descendentOf "/tmp") >-> P.take 3 >-> P.show >-> hoist lift P.stdout
