@@ -1,6 +1,5 @@
 module Data.DirStream
     ( -- * Directory Traversals
-
       childOf
 
     -- * Utilities
@@ -14,24 +13,28 @@ import Pipes (ListT(Select), yield, lift)
 import Pipes.Core ((>\\))
 import Pipes.Safe (bracket, SafeT)
 import System.Directory (readable, getPermissions, doesDirectoryExist)
-import System.FilePath ((</>), takeFileName)
+import qualified Filesystem.Path.CurrentOS as F
+import Filesystem.Path ((</>))
+import qualified Filesystem as F
 import System.Posix (openDirStream, readDirStream, closeDirStream)
 
-childOf :: FilePath -> ListT (SafeT IO) FilePath
+childOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
 childOf path = Select $ do
-    canRead <- lift $ lift $ fmap readable $ getPermissions path
-    when canRead $ bracket (openDirStream path) closeDirStream $ \dirp -> do
+    let path' = F.encodeString path
+    canRead <- lift $ lift $ fmap readable $ getPermissions path'
+    when canRead $ bracket (openDirStream path') closeDirStream $ \dirp -> do
         let loop = do
-                file <- lift $ lift $ readDirStream dirp
-                case file of
+                file' <- lift $ lift $ readDirStream dirp
+                case file' of
                     [] -> return ()
                     _  -> do
+                        let file = F.decodeString file'
                         yield (path </> file)
                         loop
         loop
 
-visible :: FilePath -> Bool
-visible path = not $ "." `isPrefixOf` takeFileName path
+visible :: F.FilePath -> Bool
+visible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 
-isDirectory :: FilePath -> ListT (SafeT IO) Bool
-isDirectory = lift . lift . doesDirectoryExist
+isDirectory :: F.FilePath -> ListT (SafeT IO) Bool
+isDirectory = lift . lift . F.isDirectory
