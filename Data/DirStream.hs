@@ -1,9 +1,24 @@
+{-| Use this module to stream directory contents in conjunction with @pipes@.
+
+    The following example shows the simplest possible program you can write
+    using @dirstream@: enumerating the contents of a single directory:
+
+> {-# LANGUAGE OverloadedStrings #-}
+>
+> import Data.DirStream
+> import Pipes
+> import qualified Pipes.Prelude as P
+>
+> main = runSafeT $ run $ every (childOf "/tmp") >-> P.show >-> P.stdout
+
+-}
+
 module Data.DirStream
     ( -- * Directory Traversals
       childOf
 
     -- * Utilities
-    , visible
+    , unixVisible
     , isDirectory
     ) where
 
@@ -18,6 +33,7 @@ import Filesystem.Path ((</>))
 import qualified Filesystem as F
 import System.Posix (openDirStream, readDirStream, closeDirStream)
 
+-- | Select all children of the given directory, ignoring @\".\"@ and @\"..\"@
 childOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
 childOf path = Select $ do
     let path' = F.encodeString path
@@ -29,12 +45,17 @@ childOf path = Select $ do
                     [] -> return ()
                     _  -> do
                         let file = F.decodeString file'
-                        yield (path </> file)
+                        when (file' /= "." && file' /= "..") $
+                            yield (path </> file)
                         loop
         loop
 
-visible :: F.FilePath -> Bool
-visible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
+{-| Determine if a file is visible according to Unix conventions, defined as the
+    base name not beginning with a @\'.\'@
+-}
+unixVisible :: F.FilePath -> Bool
+unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 
+-- | Determine if a file is a directory
 isDirectory :: F.FilePath -> ListT (SafeT IO) Bool
 isDirectory = lift . lift . F.isDirectory
