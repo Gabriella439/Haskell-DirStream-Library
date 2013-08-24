@@ -31,5 +31,5 @@ Library
         pipes      >= 4.0     && < 4.1,
         pipes-safe >= 2.0.0   && < 2.1,
         unix       >= 2.5.1.0 && < 2.7
-    Exposed-Modules: DirStream
+    Exposed-Modules: Data.DirStream
     GHC-Options: -O2
