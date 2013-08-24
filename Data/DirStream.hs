@@ -46,7 +46,7 @@ childOf path = Select $ do
 {- $utilities
     There many possible recursion schemes for traversing directories.  Rather
     than provide them all, I prefer that you learn to assemble your own
-    recursion scheme, using the @descendent@ example from the tutorial as a
+    recursion scheme, using the @descendentOf@ example from the tutorial as a
     starting point.
 -}
 
@@ -87,16 +87,16 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 -- > import Control.Monad (guard)
 -- > import qualified Filesystem.Path as F
 -- >
--- > descendent :: F.FilePath -> ListT (SafeT IO) F.FilePath
--- > descendent path = do
+-- > descendentOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
+-- > descendentOf path = do
 -- >     child <- childOf path
 -- >     isDir <- lift $ lift $ isDirectory child
 -- >     if isDir
--- >         then return child <|> descendent child
+-- >         then return child <|> descendentOf child
 -- >         else return child
 -- >
 -- > main2 = runSafeT $ run $
--- >     every (descendent "/tmp") >-> P.show >-> hoist lift P.stdout
+-- >     every (descendentOf "/tmp") >-> P.show >-> hoist lift P.stdout
 --
 -- >>> main2
 -- FilePath "/tmp"
@@ -112,7 +112,7 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 --  to satisfy downstream demand:
 --
 -- > main3 = runSafeT $ run $
--- >     every (descendent "/tmp") >-> P.take 3 >-> P.show >-> hoist lift P.stdout
+-- >     every (descendentOf "/tmp") >-> P.take 3 >-> P.show >-> hoist lift P.stdout
 --
 -- >>> main3  -- This never opens the "/tmp/dir2" directory
 -- FilePath "/tmp"
