@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+
 {-| Use this module to stream directory contents lazily in constant memory in
     conjunction with @pipes@
 -}
@@ -19,9 +21,9 @@ module Data.DirStream
 import Control.Applicative ((<|>))
 import Control.Monad (when)
 import Data.List (isPrefixOf)
-import Pipes (ListT(Select), yield, lift)
+import Pipes (ListT(Select), yield, liftIO)
 import Pipes.Core ((>\\))
-import Pipes.Safe (bracket, SafeT)
+import Pipes.Safe (bracket, SafeT, MonadSafe, Base)
 import System.Directory (readable, getPermissions, doesDirectoryExist)
 import qualified Filesystem.Path.CurrentOS as F
 import Filesystem.Path ((</>))
@@ -35,16 +37,16 @@ import System.Posix (openDirStream, readDirStream, closeDirStream)
     point.
 -}
 
-{-| Select all immediate children of the given directory, ignoring @\".\"@ and
-    @\"..\"@
+{-| Select all immediate children of the given directory, ignoring @\".\"@,
+    @\"..\"@, and files without read permissions
 -}
-childOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
+childOf :: (MonadSafe m, Base m ~ IO) => F.FilePath -> ListT m F.FilePath
 childOf path = Select $ do
     let path' = F.encodeString path
-    canRead <- lift $ lift $ fmap readable $ getPermissions path'
+    canRead <- liftIO $ fmap readable $ getPermissions path'
     when canRead $ bracket (openDirStream path') closeDirStream $ \dirp -> do
         let loop = do
-                file' <- lift $ lift $ readDirStream dirp
+                file' <- liftIO $ readDirStream dirp
                 case file' of
                     [] -> return ()
                     _  -> do
@@ -56,10 +58,10 @@ childOf path = Select $ do
 {-# INLINABLE childOf #-}
 
 -- | Select all recursive descendents of the given directory
-descendentOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
+descendentOf :: (MonadSafe m, Base m ~ IO) => F.FilePath -> ListT m F.FilePath
 descendentOf path = do
     child <- childOf path
-    isDir <- lift $ lift $ isDirectory child
+    isDir <- liftIO $ isDirectory child
     if isDir
         then return child <|> descendentOf child
         else return child
@@ -83,8 +85,7 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 -- > import Pipes.Safe
 -- > import qualified Pipes.Prelude as P
 -- >
--- > main1 = runSafeT $ run $
--- >     every (childOf "/tmp") >-> P.show >-> hoist lift P.stdout
+-- > main1 = runSafeT $ runEffect $ every (childOf "/tmp") >-> P.print
 --
 -- >>> main1
 -- FilePath "/tmp"
@@ -101,7 +102,7 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 -- > descendentOf :: F.FilePath -> ListT (SafeT IO) F.FilePath
 -- > descendentOf path = do
 -- >     child <- childOf path
--- >     isDir <- lift $ lift $ isDirectory child
+-- >     isDir <- liftIO $ isDirectory child
 -- >     if isDir
 -- >         then return child <|> descendentOf child
 -- >         else return child
@@ -109,8 +110,7 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 --  These recursive traversals will promptly open and close nested directory
 --  streams as they traverse the directory tree:
 --
--- > main2 = runSafeT $ run $
--- >     every (descendentOf "/tmp") >-> P.show >-> hoist lift P.stdout
+-- > main2 = runSafeT $ runEffect $ every (descendentOf "/tmp") >-> P.print
 --
 -- >>> main2
 -- FilePath "/tmp"
@@ -125,8 +125,8 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 --  These traverals are lazy and will open the minimal number of directories
 --  necessary to satisfy downstream demand:
 --
--- > main3 = runSafeT $ run $
--- >     every (descendentOf "/tmp") >-> P.take 3 >-> P.show >-> hoist lift P.stdout
+-- > main3 = runSafeT $ runEffect $
+-- >     every (descendentOf "/tmp") >-> P.take 3 >-> P.print
 --
 -- >>> main3  -- This never opens the "/tmp/dir2" directory
 -- FilePath "/tmp"
