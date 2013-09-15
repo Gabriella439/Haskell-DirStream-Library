@@ -118,9 +118,9 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 -- > import Data.DirStream
 -- > import Pipes
 -- > import Pipes.Safe
--- > import qualified Pipes.Prelude as P
 -- >
--- > main1 = runSafeT $ runEffect $ every (childOf "/tmp") >-> P.print
+-- > main1 = runSafeT $ runEffect $
+-- >     for (every (childOf "/tmp")) (liftIO . print)
 --
 -- >>> main1
 -- FilePath "/tmp"
@@ -145,7 +145,8 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 --  These recursive traversals will promptly open and close nested directory
 --  streams as they traverse the directory tree:
 --
--- > main2 = runSafeT $ runEffect $ every (descendentOf "/tmp") >-> P.print
+-- > main2 = runSafeT $ runEffect $
+-- >     for (every (descendentOf "/tmp")) (liftIO . print)
 --
 -- >>> main2
 -- FilePath "/tmp"
@@ -160,8 +161,10 @@ unixVisible path = not $ "." `isPrefixOf` F.encodeString (F.basename path)
 --  These traverals are lazy and will open the minimal number of directories
 --  necessary to satisfy downstream demand:
 --
+-- > import qualified Pipes.Prelude as P
+-- >
 -- > main3 = runSafeT $ runEffect $
--- >     every (descendentOf "/tmp") >-> P.take 3 >-> P.print
+-- >     for (every (descendentOf "/tmp") >-> P.take 3) (liftIO . print)
 --
 -- >>> main3  -- This never opens the "/tmp/dir2" directory
 -- FilePath "/tmp"
