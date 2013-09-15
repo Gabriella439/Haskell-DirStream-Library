@@ -31,7 +31,11 @@ Library
         system-filepath >= 0.3.1   && < 0.5,
         system-fileio   >= 0.2.1   && < 0.4,
         pipes           >= 4.0     && < 4.1,
-        pipes-safe      >= 2.0.0   && < 2.1,
-        unix            >= 2.5.1.0 && < 2.7
+        pipes-safe      >= 2.0.0   && < 2.1
+    if os(windows) {
+        Build-Depends: Win32 >= 2.2.0.1 && < 2.4
+    } else {
+        Build-Depends: unix  >= 2.5.1.0 && < 2.7
+    }
     Exposed-Modules: Data.DirStream
-    GHC-Options: -O2
+    GHC-Options: -O2 -Wall

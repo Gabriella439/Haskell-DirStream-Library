@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, CPP, OverloadedStrings #-}
 
 {-| Use this module to stream directory contents lazily in constant memory in
     conjunction with @pipes@
@@ -22,13 +22,17 @@ import Control.Applicative ((<|>))
 import Control.Monad (when)
 import Data.List (isPrefixOf)
 import Pipes (ListT(Select), yield, liftIO)
-import Pipes.Core ((>\\))
-import Pipes.Safe (bracket, SafeT, MonadSafe, Base)
-import System.Directory (readable, getPermissions, doesDirectoryExist)
+import Pipes.Safe (bracket, MonadSafe, Base)
+import System.Directory (readable, getPermissions)
 import qualified Filesystem.Path.CurrentOS as F
 import Filesystem.Path ((</>))
 import Filesystem (isDirectory)
+#ifdef mingw32_HOST_OS
+import System.Win32 (
+    findFirstFile, findClose, getFindDataFileName, findNextFile )
+#else
 import System.Posix (openDirStream, readDirStream, closeDirStream)
+#endif
 
 {- $traversals
     There many possible recursion schemes for traversing directories.  Rather
@@ -44,17 +48,31 @@ childOf :: (MonadSafe m, Base m ~ IO) => F.FilePath -> ListT m F.FilePath
 childOf path = Select $ do
     let path' = F.encodeString path
     canRead <- liftIO $ fmap readable $ getPermissions path'
-    when canRead $ bracket (openDirStream path') closeDirStream $ \dirp -> do
-        let loop = do
-                file' <- liftIO $ readDirStream dirp
-                case file' of
-                    [] -> return ()
-                    _  -> do
-                        let file = F.decodeString file'
-                        when (file' /= "." && file' /= "..") $
-                            yield (path </> file)
-                        loop
-        loop
+    when canRead $
+#ifdef mingw32_HOST_OS
+        bracket
+            (findFirstFile (F.encodeString (path </> "*")))
+            (\(h, _) -> findClose h)
+            $ \(h, fdat) -> do
+                let loop = do
+                        filename <- liftIO $ getFindDataFileName fdat
+                        yield (F.decodeString filename)
+                        more     <- liftIO $ findNextFile h fdat
+                        when more loop
+                loop
+#else
+        bracket (openDirStream path') closeDirStream $ \dirp -> do
+            let loop = do
+                    file' <- liftIO $ readDirStream dirp
+                    case file' of
+                        [] -> return ()
+                        _  -> do
+                            let file = F.decodeString file'
+                            when (file' /= "." && file' /= "..") $
+                                yield (path </> file)
+                            loop
+            loop
+#endif
 {-# INLINABLE childOf #-}
 
 -- | Select all recursive descendents of the given directory
