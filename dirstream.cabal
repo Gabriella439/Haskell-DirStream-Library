@@ -18,6 +18,8 @@ Description: Use this library to read large directories as streams:
   * Traversals only open directory streams lazily in response to demand
   .
   * Avoid directories with insufficient permissions
+  .
+  This library works on both Unix and Windows.
 Category: System, Pipes
 Source-Repository head
     Type: git
