@@ -20,7 +20,9 @@ module Data.DirStream
 
 import Control.Applicative ((<|>))
 import Control.Monad (when)
+#ifdef mingw32_HOST_OS
 import Data.Bits ((.&.))
+#endif
 import Data.List (isPrefixOf)
 import Pipes (ListT(Select), yield, liftIO)
 import Pipes.Safe (bracket, MonadSafe, Base)
@@ -41,11 +43,13 @@ import System.Posix (openDirStream, readDirStream, closeDirStream)
     point.
 -}
 
+#ifdef mingw32_HOST_OS
 fILE_ATTRIBUTE_REPARSE_POINT :: Win32.FileAttributeOrFlag
 fILE_ATTRIBUTE_REPARSE_POINT = 1024
 
 reparsePoint :: Win32.FileAttributeOrFlag -> Bool
 reparsePoint attr = fILE_ATTRIBUTE_REPARSE_POINT .&. attr /= 0
+#endif
 
 {-| Select all immediate children of the given directory, ignoring @\".\"@,
     @\"..\"@, and files without read permissions
@@ -54,9 +58,9 @@ childOf :: (MonadSafe m, Base m ~ IO) => F.FilePath -> ListT m F.FilePath
 childOf path = Select $ do
     let path' = F.encodeString path
     canRead <- liftIO $ fmap readable $ getPermissions path'
+#ifdef mingw32_HOST_OS
     reparse <- liftIO $ fmap reparsePoint $ Win32.getFileAttributes path'
     when (canRead && not reparse) $
-#ifdef mingw32_HOST_OS
         bracket
             (Win32.findFirstFile (F.encodeString (path </> "*")))
             (\(h, _) -> Win32.findClose h)
@@ -70,6 +74,7 @@ childOf path = Select $ do
                         when more loop
                 loop
 #else
+    when (canRead) $
         bracket (openDirStream path') closeDirStream $ \dirp -> do
             let loop = do
                     file' <- liftIO $ readDirStream dirp
