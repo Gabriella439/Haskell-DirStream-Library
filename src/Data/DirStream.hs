@@ -20,6 +20,7 @@ module Data.DirStream
 
 import Control.Applicative ((<|>))
 import Control.Monad (when)
+import Data.Bits ((.&.))
 import Data.List (isPrefixOf)
 import Pipes (ListT(Select), yield, liftIO)
 import Pipes.Safe (bracket, MonadSafe, Base)
@@ -28,8 +29,7 @@ import qualified Filesystem.Path.CurrentOS as F
 import Filesystem.Path ((</>))
 import Filesystem (isDirectory)
 #ifdef mingw32_HOST_OS
-import System.Win32 (
-    findFirstFile, findClose, getFindDataFileName, findNextFile )
+import qualified System.Win32 as Win32
 #else
 import System.Posix (openDirStream, readDirStream, closeDirStream)
 #endif
@@ -41,6 +41,12 @@ import System.Posix (openDirStream, readDirStream, closeDirStream)
     point.
 -}
 
+fILE_ATTRIBUTE_REPARSE_POINT :: Win32.FileAttributeOrFlag
+fILE_ATTRIBUTE_REPARSE_POINT = 1024
+
+reparsePoint :: Win32.FileAttributeOrFlag -> Bool
+reparsePoint attr = fILE_ATTRIBUTE_REPARSE_POINT .&. attr /= 0
+
 {-| Select all immediate children of the given directory, ignoring @\".\"@,
     @\"..\"@, and files without read permissions
 -}
@@ -48,16 +54,19 @@ childOf :: (MonadSafe m, Base m ~ IO) => F.FilePath -> ListT m F.FilePath
 childOf path = Select $ do
     let path' = F.encodeString path
     canRead <- liftIO $ fmap readable $ getPermissions path'
-    when canRead $
+    reparse <- liftIO $ fmap reparsePoint $ Win32.getFileAttributes path'
+    when (canRead && not reparse) $
 #ifdef mingw32_HOST_OS
         bracket
-            (findFirstFile (F.encodeString (path </> "*")))
-            (\(h, _) -> findClose h)
+            (Win32.findFirstFile (F.encodeString (path </> "*")))
+            (\(h, _) -> Win32.findClose h)
             $ \(h, fdat) -> do
                 let loop = do
-                        filename <- liftIO $ getFindDataFileName fdat
-                        yield (F.decodeString filename)
-                        more     <- liftIO $ findNextFile h fdat
+                        file' <- liftIO $ Win32.getFindDataFileName fdat
+                        let file = F.decodeString file'
+                        when (file' /= "." && file' /= "..") $
+                            yield (path </> file)
+                        more  <- liftIO $ Win32.findNextFile h fdat
                         when more loop
                 loop
 #else
