@@ -51,8 +51,11 @@ reparsePoint :: Win32.FileAttributeOrFlag -> Bool
 reparsePoint attr = fILE_ATTRIBUTE_REPARSE_POINT .&. attr /= 0
 #endif
 
-{-| Select all immediate children of the given directory, ignoring @\".\"@,
-    @\"..\"@, and files without read permissions
+{-| Select all immediate children of the given directory, ignoring @\".\"@ and
+    @\"..\"@.
+
+    Returns zero children if the directory is not readable or (on Windows) if
+    the directory is actually a reparse point.
 -}
 childOf :: (MonadSafe m, Base m ~ IO) => F.FilePath -> ListT m F.FilePath
 childOf path = Select $ do
