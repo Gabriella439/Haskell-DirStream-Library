@@ -24,8 +24,8 @@ import Control.Monad (when)
 import Data.Bits ((.&.))
 #endif
 import Data.List (isPrefixOf)
-import Pipes (ListT(Select), yield, liftIO, MonadIO)
-import Pipes.Safe (bracket, MonadSafe, Base)
+import Pipes (ListT(Select), yield, liftIO)
+import Pipes.Safe (bracket, MonadSafe)
 import System.Directory (readable, getPermissions)
 import qualified Filesystem.Path.CurrentOS as F
 import Filesystem.Path ((</>))
