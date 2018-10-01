@@ -20,6 +20,7 @@ module Data.DirStream
 
 import Control.Applicative ((<|>))
 import Control.Monad (when)
+import Control.Monad.Fail (MonadFail)
 #ifdef mingw32_HOST_OS
 import Data.Bits ((.&.))
 #endif
@@ -57,7 +58,7 @@ reparsePoint attr = fILE_ATTRIBUTE_REPARSE_POINT .&. attr /= 0
     Returns zero children if the directory is not readable or (on Windows) if
     the directory is actually a reparse point.
 -}
-childOf :: MonadSafe m => F.FilePath -> ListT m F.FilePath
+childOf :: (MonadSafe m, MonadFail m) => F.FilePath -> ListT m F.FilePath
 childOf path = Select $ do
     let path' = F.encodeString path
     canRead <- liftIO $ fmap readable $ getPermissions path'
@@ -94,7 +95,7 @@ childOf path = Select $ do
 {-# INLINABLE childOf #-}
 
 -- | Select all recursive descendents of the given directory
-descendentOf :: MonadSafe m => F.FilePath -> ListT m F.FilePath
+descendentOf :: (MonadSafe m, MonadFail m) => F.FilePath -> ListT m F.FilePath
 descendentOf path = do
     child <- childOf path
     isDir <- liftIO $ isDirectory child
